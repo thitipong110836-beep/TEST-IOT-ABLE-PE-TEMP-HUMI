@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PE IOT Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <!-- เพิ่ม SheetJS สำหรับ Export Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  
+  <style>
+    :root {
+      --primary: #2e7d32;
+      --secondary: #4caf50;
+      --bg: #f5f9f6;
+      --text: #333;
+    }
+    body {
+      font-family: 'Prompt', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0; padding: 0;
+      padding-bottom: 50px;
+    }
+    .header {
+      background: white;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 15px 20px;
+      text-align: center;
+      border-bottom: 4px solid var(--secondary);
+    }
+    .header img { max-height: 70px; margin-bottom: 10px; }
+    .header h1 { margin: 0; font-size: 26px; color: var(--primary); font-weight: 600; }
+    .header h3 { margin: 5px 0 0 0; font-size: 16px; color: #666; font-weight: 400; }
+    
+    .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
+    .grid-top {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px; margin-bottom: 20px;
+    }
+    .card {
+      background: white; border-radius: 12px; padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .card-title {
+      font-size: 18px; font-weight: 600; color: var(--primary);
+      margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+    .form-group input {
+      width: 100%; padding: 8px; border: 1px solid #ccc;
+      border-radius: 6px; box-sizing: border-box; font-family: 'Prompt';
+    }
+    .btn-save {
+      background: var(--primary); color: white; border: none;
+      padding: 10px 15px; border-radius: 6px; cursor: pointer;
+      width: 100%; font-family: 'Prompt'; font-weight: 600; font-size: 14px;
+      transition: 0.3s; margin-bottom: 10px;
+    }
+    .btn-save:hover { background: #1b5e20; }
+    .btn-action {
+      background: #1976d2; color: white; border: none;
+      padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      font-family: 'Prompt'; font-size: 13px; margin-left: 5px;
+    }
+    .btn-pdf { background: #d32f2f; }
+    
+    .chart-container { width: 100%; height: 350px; }
+    .gauge-container { width: 100%; height: 250px; }
+    .status-text { text-align: center; color: #888; font-size: 14px; margin-top: 10px; }
+    
+    /* Alarm Table */
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; color: var(--primary); }
+    .table-container { max-height: 250px; overflow-y: auto; }
+    
+    @media (max-width: 768px) {
+      .header h1 { font-size: 20px; }
+      .chart-container { height: 300px; }
+      .card-title { flex-direction: column; align-items: flex-start; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="https://i.postimg.cc/vB0Xbq8n/message-Image-1787986866051-Copy.jpg" alt="Able Medical Logo" onerror="this.src='https://placehold.co/200x70/ffffff/2e7d32?text=Able+Medical'">
+    <h1>Test IOT : Temperature & Humidity</h1>
+    <h3>โดยแผนก PE</h3>
+  </div>
+
+  <div class="container">
+    <div class="grid-top">
+      <div class="card">
+        <div class="card-title">⚙️ ตั้งค่า Alarm & แจ้งเตือน</div>
+        <div class="form-group">
+          <label>Target อุณหภูมิสูงสุด (°C)</label>
+          <input type="number" id="targetTemp" placeholder="เช่น 30" onchange="updateChartsTarget()">
+        </div>
+        <div class="form-group">
+          <label>Target ความชื้นสูงสุด (%RH)</label>
+          <input type="number" id="targetHumi" placeholder="เช่น 60" onchange="updateChartsTarget()">
+        </div>
+        <div class="form-group">
+          <label>Line Notify Token</label>
+          <input type="password" id="lineToken" placeholder="วาง Token ที่นี่">
+        </div>
+        <div class="form-group">
+          <label>Email สำหรับรับแจ้งเตือน</label>
+          <input type="email" id="emailAlert" placeholder="example@ablemedical.com">
+        </div>
+        <button class="btn-save" onclick="saveSettings()">บันทึกการตั้งค่า</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🌡️ อุณหภูมิ (Temperature)</div>
+        <div id="gaugeTemp" class="gauge-container"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">💧 ความชื้น (Humidity)</div>
+        <div id="gaugeHumi" class="gauge-container"></div>
+      </div>
+    </div>
+
+    <!-- Chart & Actions -->
+    <div class="card">
+      <div class="card-title">
+        📈 กราฟประวัติข้อมูล (History Trend)
+        <div>
+          <button class="btn-action btn-pdf" onclick="printPDF()">🖨️ PDF / Print</button>
+          <button class="btn-action" onclick="exportExcel()">📊 Export Excel</button>
+        </div>
+      </div>
+      <div id="lineChart" class="chart-container"></div>
+      <div class="status-text" id="lastUpdate">กำลังเชื่อมต่อข้อมูล...</div>
+    </div>
+    
+    <!-- Alarm History Table -->
+    <div class="card" style="margin-top: 20px;" id="alarmTableContainer">
+      <div class="card-title">🚨 ประวัติการแจ้งเตือน (Alarm History)</div>
+      <div class="table-container">
+        <table id="alarmTable">
+          <thead>
+            <tr>
+              <th>เวลา (Time)</th>
+              <th>ประเภท (Type)</th>
+              <th>ค่าที่วัดได้ (Value)</th>
+              <th>ค่าเป้าหมาย (Target)</th>
+            </tr>
+          </thead>
+          <tbody id="alarmBody">
+            <!-- Data will be appended here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // MOCK FOR google.script.run (STANDALONE PREVIEW)
+    // ==========================================
+    if (typeof google === 'undefined') {
+      window.google = {
+        script: {
+          run: {
+            withSuccessHandler: function(callback) {
+              return {
+                getDashboardData: function() {
+                  const now = new Date();
+                  const timeStr = now.toLocaleTimeString('th-TH', { hour12: false });
+                  
+                  // Generate somewhat realistic fluctuating data
+                  const baseTemp = 28;
+                  const baseHumi = 55;
+                  const currentTemp = +(baseTemp + (Math.random() * 4 - 2)).toFixed(1);
+                  const currentHumi = +(baseHumi + (Math.random() * 10 - 5)).toFixed(1);
+
+                  if (!window.mockHistoryData) window.mockHistoryData = [];
+                  
+                  window.mockHistoryData.push({ time: timeStr, temp: currentTemp, humi: currentHumi });
+                  
+                  // Keep only the last 30 data points for the chart to not overflow too much during preview
+                  if (window.mockHistoryData.length > 30) {
+                    window.mockHistoryData.shift();
+                  }
+
+                  const mockData = {
+                    current: { time: timeStr, temp: currentTemp, humi: currentHumi },
+                    history: window.mockHistoryData
+                  };
+
+                  setTimeout(() => callback(mockData), 300); // Simulate network delay
+                }
+              };
+            },
+            triggerServerAlert: function(token, email, alertMessage) {
+              console.log("Mock Alert Triggered:", { token, email, alertMessage });
+            }
+          }
+        }
+      };
+    }
+    // ==========================================
+
+    var gaugeTemp = echarts.init(document.getElementById('gaugeTemp'));
+    var gaugeHumi = echarts.init(document.getElementById('gaugeHumi'));
+    var lineChart = echarts.init(document.getElementById('lineChart'));
+    
+    var lastAlertTime = 0;
+    var alertCooldown = 300000; 
+    var globalDataHistory = [];
+    var loggedAlarms = new Set(); // ป้องกันการบันทึก Alarm ซ้ำซ้อนในตารางช่วงเวลาเดียวกัน
+
+    window.onload = function() {
+      document.getElementById('targetTemp').value = localStorage.getItem('targetTemp') || '';
+      document.getElementById('targetHumi').value = localStorage.getItem('targetHumi') || '';
+      document.getElementById('lineToken').value = localStorage.getItem('lineToken') || '';
+      document.getElementById('emailAlert').value = localStorage.getItem('emailAlert') || '';
+      
+      initCharts();
+      fetchData();
+      setInterval(fetchData, 5000);
+    };
+
+    function saveSettings() {
+      localStorage.setItem('targetTemp', document.getElementById('targetTemp').value);
+      localStorage.setItem('targetHumi', document.getElementById('targetHumi').value);
+      localStorage.setItem('lineToken', document.getElementById('lineToken').value);
+      localStorage.setItem('emailAlert', document.getElementById('emailAlert').value);
+      updateChartsTarget();
+      Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 2000, showConfirmButton: false });
+    }
+
+    function initCharts() {
+      var gaugeOption = {
+        series: [{
+          type: 'gauge', center: ['50%', '60%'], radius: '90%',
+          progress: { show: true, width: 12 },
+          axisLine: { lineStyle: { width: 12 } }, axisTick: { show: false },
+          splitLine: { length: 15, lineStyle: { width: 2, color: '#999' } },
+          pointer: { width: 5 },
+          detail: { valueAnimation: true, fontSize: 30, offsetCenter: [0, '70%'], formatter: '{value}' },
+          data: [{ value: 0, name: 'Current' }]
+        }]
+      };
+      
+      var tempOpt = JSON.parse(JSON.stringify(gaugeOption));
+      tempOpt.series[0].progress.itemStyle = { color: '#e53935' };
+      tempOpt.series[0].max = 50;
+      tempOpt.series[0].detail.formatter = '{value} °C';
+      gaugeTemp.setOption(tempOpt);
+
+      var humiOpt = JSON.parse(JSON.stringify(gaugeOption));
+      humiOpt.series[0].progress.itemStyle = { color: '#1e88e5' };
+      humiOpt.series[0].max = 100;
+      humiOpt.series[0].detail.formatter = '{value} %';
+      gaugeHumi.setOption(humiOpt);
+
+      var lineOption = {
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['อุณหภูมิ (°C)', 'ความชื้น (%RH)'], bottom: 0 },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+        xAxis: { type: 'category', boundaryGap: false, data: [] },
+        yAxis: [
+          { type: 'value', name: '°C', position: 'left', splitLine: { show: true, lineStyle: { type: 'dashed' } } },
+          { type: 'value', name: '%RH', position: 'right', splitLine: { show: false } }
+        ],
+        series: [
+          { name: 'อุณหภูมิ (°C)', type: 'line', smooth: true, itemStyle: { color: '#e53935' }, areaStyle: { color: 'rgba(229, 57, 53, 0.1)' }, data: [] },
+          { name: 'ความชื้น (%RH)', type: 'line', yAxisIndex: 1, smooth: true, itemStyle: { color: '#1e88e5' }, areaStyle: { color: 'rgba(30, 136, 229, 0.1)' }, data: [] }
+        ]
+      };
+      lineChart.setOption(lineOption);
+    }
+
+    function updateChartsTarget() {
+      var tTemp = parseFloat(document.getElementById('targetTemp').value);
+      var tHumi = parseFloat(document.getElementById('targetHumi').value);
+      
+      // อัปเดตเส้นประ MarkLine ในกราฟเส้น
+      var markLineDataTemp = !isNaN(tTemp) ? [{ yAxis: tTemp, name: 'Target °C' }] : [];
+      var markLineDataHumi = !isNaN(tHumi) ? [{ yAxis: tHumi, name: 'Target %RH' }] : [];
+      
+      lineChart.setOption({
+        series: [
+          { markLine: { data: markLineDataTemp, lineStyle: { color: '#e53935', type: 'dashed', width: 2 } } },
+          { markLine: { data: markLineDataHumi, lineStyle: { color: '#1e88e5', type: 'dashed', width: 2 } } }
+        ]
+      });
+
+      // ดึงค่าปัจจุบันที่แสดงอยู่บนเกจเพื่อเอามาวาดคู่กับ Target Arrow
+      var currentTemp = gaugeTemp.getOption().series[0].data[0].value || 0;
+      var currentHumi = gaugeHumi.getOption().series[0].data[0].value || 0;
+      
+      var tempData = [{ value: currentTemp, name: 'Current' }];
+      if(!isNaN(tTemp)) tempData.push({ value: tTemp, name: 'Target', itemStyle: { color: '#fbc02d' }, pointer: { width: 3, length: '70%', icon: 'triangle' }, title: {show: false}, detail: {show: false} });
+      
+      var humiData = [{ value: currentHumi, name: 'Current' }];
+      if(!isNaN(tHumi)) humiData.push({ value: tHumi, name: 'Target', itemStyle: { color: '#fbc02d' }, pointer: { width: 3, length: '70%', icon: 'triangle' }, title: {show: false}, detail: {show: false} });
+
+      gaugeTemp.setOption({ series: [{ data: tempData }] });
+      gaugeHumi.setOption({ series: [{ data: humiData }] });
+    }
+
+    function fetchData() {
+      google.script.run.withSuccessHandler(updateDashboard).getDashboardData();
+    }
+
+    function updateDashboard(data) {
+      if (!data.current) return;
+      globalDataHistory = data.history;
+
+      var times = data.history.map(item => item.time);
+      var temps = data.history.map(item => item.temp);
+      var humis = data.history.map(item => item.humi);
+      
+      lineChart.setOption({ xAxis: { data: times }, series: [{ data: temps }, { data: humis }] });
+      
+      var tTemp = parseFloat(document.getElementById('targetTemp').value);
+      var tHumi = parseFloat(document.getElementById('targetHumi').value);
+      
+      var tempData = [{ value: data.current.temp, name: 'Current' }];
+      if(!isNaN(tTemp)) tempData.push({ value: tTemp, name: 'Target', itemStyle: { color: '#fbc02d' }, pointer: { width: 3, length: '70%', icon: 'triangle' }, title: {show: false}, detail: {show: false} });
+      
+      var humiData = [{ value: data.current.humi, name: 'Current' }];
+      if(!isNaN(tHumi)) humiData.push({ value: tHumi, name: 'Target', itemStyle: { color: '#fbc02d' }, pointer: { width: 3, length: '70%', icon: 'triangle' }, title: {show: false}, detail: {show: false} });
+
+      gaugeTemp.setOption({ series: [{ data: tempData }] });
+      gaugeHumi.setOption({ series: [{ data: humiData }] });
+
+      document.getElementById('lastUpdate').innerText = "อัปเดตข้อมูลล่าสุดเมื่อ: " + data.current.time;
+      checkAlarm(data.current.temp, data.current.humi, data.current.time);
+    }
+
+    function checkAlarm(currentTemp, currentHumi, timeStr) {
+      var targetTemp = parseFloat(document.getElementById('targetTemp').value);
+      var targetHumi = parseFloat(document.getElementById('targetHumi').value);
+      var token = document.getElementById('lineToken').value;
+      var email = document.getElementById('emailAlert').value;
+      
+      var alertMessage = "";
+      var isTriggered = false;
+
+      // ตรวจสอบอุณหภูมิและบันทึกลงตาราง
+      if (!isNaN(targetTemp) && currentTemp > targetTemp) {
+        alertMessage += "⚠️ อุณหภูมิ (" + currentTemp + "°C) เกินค่ากำหนดที่ " + targetTemp + "°C\n";
+        isTriggered = true;
+        logAlarm(timeStr, "Temperature", currentTemp + " °C", targetTemp + " °C");
+      }
+      
+      // ตรวจสอบความชื้นและบันทึกลงตาราง
+      if (!isNaN(targetHumi) && currentHumi > targetHumi) {
+        alertMessage += "⚠️ ความชื้น (" + currentHumi + "%RH) เกินค่ากำหนดที่ " + targetHumi + "%RH\n";
+        isTriggered = true;
+        logAlarm(timeStr, "Humidity", currentHumi + " %RH", targetHumi + " %RH");
+      }
+
+      if (isTriggered) {
+        var now = Date.now();
+        if (now - lastAlertTime > alertCooldown) {
+          lastAlertTime = now;
+          Swal.fire({ icon: 'error', title: 'Alarm Triggered!', text: alertMessage, confirmButtonColor: '#d33', confirmButtonText: 'รับทราบ' });
+          if(token || email) {
+            google.script.run.triggerServerAlert(token, email, alertMessage);
+          }
+        }
+      }
+    }
+
+    function logAlarm(timeStr, type, value, target) {
+      var logKey = timeStr + "_" + type;
+      if (!loggedAlarms.has(logKey)) {
+        loggedAlarms.add(logKey);
+        var tbody = document.getElementById('alarmBody');
+        var row = `<tr style="color:red;">
+                     <td>${timeStr}</td>
+                     <td>${type}</td>
+                     <td>${value}</td>
+                     <td>${target}</td>
+                   </tr>`;
+        tbody.insertAdjacentHTML('afterbegin', row);
+      }
+    }
+
+    function exportExcel() {
+      if(globalDataHistory.length === 0) {
+        Swal.fire('ไม่มีข้อมูล', 'ยังไม่มีข้อมูลสำหรับ Export', 'warning');
+        return;
+      }
+      var wsData = [["Time", "Temperature (°C)", "Humidity (%RH)"]];
+      globalDataHistory.forEach(function(row) {
+        wsData.push([row.time, row.temp, row.humi]);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(wsData);
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "HistoryLog");
+      XLSX.writeFile(wb, "PE_IoT_Data.xlsx");
+    }
+
+    function printPDF() {
+      // ดึงภาพกราฟจาก Canvas
+      var tempImg = gaugeTemp.getDataURL({ type: 'png', backgroundColor: '#fff' });
+      var humiImg = gaugeHumi.getDataURL({ type: 'png', backgroundColor: '#fff' });
+      var chartImg = lineChart.getDataURL({ type: 'png', backgroundColor: '#fff' });
+      var alarmHtml = document.getElementById('alarmTableContainer').outerHTML;
+      
+      // สร้างหน้าต่างใหม่พร้อมตั้งค่าหน้ากระดาษ A4
+      var printWin = window.open('', '_blank');
+      var html = `
+        <html>
+          <head>
+            <title>PE IOT Report</title>
+            <style>
+              @page { size: A4 portrait; margin: 15mm; }
+              body { font-family: sans-serif; color: #333; }
+              .header { text-align: center; border-bottom: 2px solid #4caf50; padding-bottom: 10px; margin-bottom: 20px; }
+              .header img { max-height: 60px; }
+              h1 { font-size: 20px; color: #2e7d32; margin: 5px 0; }
+              .gauges { text-align: center; margin-bottom: 20px; }
+              .gauges img { width: 45%; display: inline-block; }
+              .chart { text-align: center; margin-bottom: 20px; }
+              .chart img { width: 100%; max-height: 350px; object-fit: contain; }
+              table { width: 100%; border-collapse: collapse; font-size: 12px; }
+              th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+              th { background-color: #f2f2f2; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <img src="https://i.postimg.cc/vB0Xbq8n/message-Image-1787986866051-Copy.jpg">
+              <h1>รายงานอุณหภูมิและความชื้น (แผนก PE)</h1>
+            </div>
+            <div class="gauges">
+              <img src="${tempImg}">
+              <img src="${humiImg}">
+            </div>
+            <div class="chart">
+              <h3>กราฟประวัติข้อมูล</h3>
+              <img src="${chartImg}">
+            </div>
+            ${alarmHtml}
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                  window.close();
+                }, 500);
+              };
+            <\/script>
+          </body>
+        </html>
+      `;
+      printWin.document.open();
+      printWin.document.write(html);
+      printWin.document.close();
+    }
+
+    window.addEventListener('resize', function() {
+      gaugeTemp.resize(); gaugeHumi.resize(); lineChart.resize();
+    });
+  </script>
+</body>
+</html>
